@@ -21,6 +21,7 @@ from app.utils.logger import generate_request_id, log
 
 
 load_dotenv()
+_startup_warmup_task: asyncio.Task[None] | None = None
 
 
 # Splits configured frontend origins because local dev and Render need different CORS values without code edits.
@@ -90,25 +91,48 @@ async def _maybe_seed_database(request_id: str) -> None:
     log("app.startup.seed_complete", request_id, **counts)
 
 
-# Prepares indexes and optional seed data because the API should be usable immediately after startup.
+# Warms external dependencies in the background because Render only needs the HTTP server to bind quickly.
+async def _run_startup_warmup(request_id: str) -> None:
+    neo4j_ready = False
+
+    try:
+        neo4j_ready = await _wait_for_neo4j(request_id)
+        if neo4j_ready:
+            await asyncio.to_thread(create_indexes)
+            await _maybe_seed_database(request_id)
+        else:
+            log("app.startup.degraded", request_id, neo4j="unreachable")
+    except asyncio.CancelledError:
+        log("app.startup.cancelled", request_id)
+        raise
+    except Exception as exc:
+        log("app.startup.failed", request_id, error=str(exc))
+    finally:
+        log("app.startup.complete", request_id, neo4j_ready=neo4j_ready)
+
+
+# Schedules indexes and optional seed data because the web server must accept traffic before warmup finishes.
 @app.on_event("startup")
 async def startup_event() -> None:
+    global _startup_warmup_task
+
     request_id = generate_request_id()
     log("app.startup.begin", request_id)
-    neo4j_ready = await _wait_for_neo4j(request_id)
-    if neo4j_ready:
-        await asyncio.to_thread(create_indexes)
-        await _maybe_seed_database(request_id)
-    else:
-        log("app.startup.degraded", request_id, neo4j="unreachable")
-    log("app.startup.complete", request_id, neo4j_ready=neo4j_ready)
+    _startup_warmup_task = asyncio.create_task(_run_startup_warmup(request_id))
+    log("app.startup.warmup_scheduled", request_id)
 
 
 # Closes external resources because orderly shutdown prevents connection leaks between restarts and tests.
 @app.on_event("shutdown")
 async def shutdown_event() -> None:
+    global _startup_warmup_task
+
     request_id = generate_request_id()
     log("app.shutdown.begin", request_id)
+    if _startup_warmup_task is not None and not _startup_warmup_task.done():
+        _startup_warmup_task.cancel()
+        await asyncio.gather(_startup_warmup_task, return_exceptions=True)
+    _startup_warmup_task = None
     await asyncio.to_thread(close_driver)
     log("app.shutdown.complete", request_id)
 

@@ -22,9 +22,18 @@ def test_resolve_entity_returns_best_matching_schema_label(monkeypatch) -> None:
 
 
 # Verifies startup fallback because the backend should still boot when the embedding model cannot load.
-def test_resolve_entity_returns_none_when_model_is_unavailable(monkeypatch) -> None:
+def test_resolve_entity_uses_aliases_when_model_is_unavailable(monkeypatch) -> None:
     monkeypatch.setattr(semantic_search, "_model_available", False)
     monkeypatch.setattr(semantic_search, "_model", None)
     monkeypatch.setattr(semantic_search, "_entity_embeddings", None)
 
-    assert semantic_search.resolve_entity("invoice") is None
+    assert semantic_search.resolve_entity("shipment") == "Delivery"
+
+
+# Verifies safe fallback because terms outside the schema should not produce random matches when embeddings are unavailable.
+def test_resolve_entity_returns_none_for_unknown_term_when_model_is_unavailable(monkeypatch) -> None:
+    monkeypatch.setattr(semantic_search, "_model_available", False)
+    monkeypatch.setattr(semantic_search, "_model", None)
+    monkeypatch.setattr(semantic_search, "_entity_embeddings", None)
+
+    assert semantic_search.resolve_entity("mystery entity", threshold=0.95) is None

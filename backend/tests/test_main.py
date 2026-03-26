@@ -35,8 +35,8 @@ def test_root_returns_ok_payload() -> None:
     assert asyncio.run(main.root()) == {"status": "ok", "service": "Graph Query System API"}
 
 
-# Verifies graceful startup because the app should not crash when Aura is temporarily unreachable.
-def test_startup_event_skips_index_creation_and_seeding_when_neo4j_is_unreachable(monkeypatch) -> None:
+# Verifies graceful warmup because the app should not crash when Aura is temporarily unreachable.
+def test_run_startup_warmup_skips_index_creation_and_seeding_when_neo4j_is_unreachable(monkeypatch) -> None:
     create_indexes_mock = Mock()
     maybe_seed_database_mock = AsyncMock()
 
@@ -44,7 +44,7 @@ def test_startup_event_skips_index_creation_and_seeding_when_neo4j_is_unreachabl
     monkeypatch.setattr(main, "create_indexes", create_indexes_mock)
     monkeypatch.setattr(main, "_maybe_seed_database", maybe_seed_database_mock)
 
-    asyncio.run(main.startup_event())
+    asyncio.run(main._run_startup_warmup("request-3"))
 
     create_indexes_mock.assert_not_called()
     maybe_seed_database_mock.assert_not_called()
