@@ -23,6 +23,12 @@ limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/api", tags=["api"])
 
 
+NEO4J_UNREACHABLE_DETAIL = (
+    "Neo4j is unreachable. Check NEO4J_URI, NEO4J_USER, "
+    "NEO4J_PASSWORD, and NEO4J_DATABASE in the deployment environment."
+)
+
+
 # Returns the fixed node inspection query because the graph endpoint must stay read-only and predictable.
 def _graph_nodes_cypher() -> str:
     return """
@@ -75,6 +81,14 @@ def _broken_flow_queries() -> dict[str, str]:
 # Runs one fixed read query because API endpoints should keep Neo4j access off the event loop thread.
 async def _run_read_query(cypher: str) -> list[dict]:
     return await asyncio.to_thread(run_query, cypher, None, 10)
+
+
+# Builds a consistent dependency failure response because read-only graph routes should degrade without throwing raw 500 errors.
+async def _neo4j_failure_response(request_id: str, log_event: str, error: Exception, fallback_detail: str) -> JSONResponse:
+    neo4j_ok = await asyncio.to_thread(check_neo4j_health)
+    detail = fallback_detail if neo4j_ok else NEO4J_UNREACHABLE_DETAIL
+    log(log_event, request_id, neo4j_ok=neo4j_ok, error=str(error))
+    return JSONResponse(content={"detail": detail}, status_code=503)
 
 
 # Validates the ingestion bearer token because production ingestion should not be publicly callable.
@@ -132,13 +146,23 @@ async def health_endpoint(request: Request) -> JSONResponse:
 # Returns a graph snapshot because the frontend and operators need a direct visualization payload without using the LLM.
 @router.get("/graph")
 @limiter.limit("10/minute")
-async def graph_endpoint(request: Request) -> dict[str, list[dict]]:
+async def graph_endpoint(request: Request) -> dict[str, list[dict]] | JSONResponse:
     request_id = generate_request_id()
     log("api.graph.request", request_id)
-    nodes, edges = await asyncio.gather(
-        _run_read_query(_graph_nodes_cypher()),
-        _run_read_query(_graph_edges_cypher()),
-    )
+
+    try:
+        nodes, edges = await asyncio.gather(
+            _run_read_query(_graph_nodes_cypher()),
+            _run_read_query(_graph_edges_cypher()),
+        )
+    except Exception as exc:
+        return await _neo4j_failure_response(
+            request_id,
+            "api.graph.failed",
+            exc,
+            "Graph data could not be loaded from Neo4j.",
+        )
+
     log("api.graph.response", request_id, node_count=len(nodes), edge_count=len(edges))
     return {"nodes": nodes, "edges": edges}
 
@@ -146,13 +170,21 @@ async def graph_endpoint(request: Request) -> dict[str, list[dict]]:
 # Returns operationally interesting missing-link flows because incomplete order-to-cash chains are a core Stage 1 use case.
 @router.get("/broken-flows")
 @limiter.limit("10/minute")
-async def broken_flows_endpoint(request: Request) -> dict[str, object]:
+async def broken_flows_endpoint(request: Request) -> dict[str, object] | JSONResponse:
     request_id = generate_request_id()
     log("api.broken_flows.request", request_id)
 
-    details: dict[str, list[dict]] = {}
-    for flow_name, cypher in _broken_flow_queries().items():
-        details[flow_name] = await _run_read_query(cypher)
+    try:
+        details: dict[str, list[dict]] = {}
+        for flow_name, cypher in _broken_flow_queries().items():
+            details[flow_name] = await _run_read_query(cypher)
+    except Exception as exc:
+        return await _neo4j_failure_response(
+            request_id,
+            "api.broken_flows.failed",
+            exc,
+            "Broken-flow diagnostics could not be loaded from Neo4j.",
+        )
 
     broken_flow_count = sum(len(rows) for rows in details.values())
     log("api.broken_flows.response", request_id, broken_flow_count=broken_flow_count)

@@ -53,6 +53,30 @@ def test_broken_flows_endpoint_aggregates_all_queries(monkeypatch) -> None:
     assert response.json()["broken_flow_count"] == 3
 
 
+# Verifies graceful degradation because Neo4j outages should produce a clean API error instead of an unhandled 500.
+def test_graph_endpoint_returns_503_when_neo4j_query_fails(monkeypatch) -> None:
+    monkeypatch.setattr(routes, "run_query", Mock(side_effect=RuntimeError("db unavailable")))
+    monkeypatch.setattr(routes, "check_neo4j_health", Mock(return_value=False))
+
+    client = create_test_app()
+    response = client.get("/api/graph")
+
+    assert response.status_code == 503
+    assert "Neo4j is unreachable" in response.json()["detail"]
+
+
+# Verifies graceful diagnostics degradation because broken-flow reads should return a handled 503 on Neo4j failures.
+def test_broken_flows_endpoint_returns_503_when_neo4j_query_fails(monkeypatch) -> None:
+    monkeypatch.setattr(routes, "run_query", Mock(side_effect=RuntimeError("db unavailable")))
+    monkeypatch.setattr(routes, "check_neo4j_health", Mock(return_value=False))
+
+    client = create_test_app()
+    response = client.get("/api/broken-flows")
+
+    assert response.status_code == 503
+    assert "Neo4j is unreachable" in response.json()["detail"]
+
+
 # Verifies the query endpoint contract because it should return the pipeline's structured response unchanged.
 def test_query_endpoint_returns_pipeline_response(monkeypatch) -> None:
     monkeypatch.setattr(
