@@ -14,9 +14,10 @@ from app.utils.logger import log
 _driver: Driver | None = None
 
 
-# Returns the configured Neo4j database because every session should target the same database name.
-def _get_database_name() -> str:
-    return os.environ.get("NEO4J_DATABASE", "neo4j")
+# Returns the configured Neo4j database because managed Neo4j instances may require either an explicit name or the server default.
+def _get_database_name() -> str | None:
+    configured = os.environ.get("NEO4J_DATABASE", "").strip()
+    return configured or None
 
 
 # Returns the configured Neo4j URI because local Docker and Aura differ only by environment.

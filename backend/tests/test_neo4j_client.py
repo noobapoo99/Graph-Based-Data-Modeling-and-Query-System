@@ -5,6 +5,20 @@ import pytest
 from app.database import neo4j_client
 
 
+# Verifies Aura compatibility because forcing a nonexistent database name should not break managed Neo4j deployments.
+def test_get_database_name_returns_none_when_env_is_missing(monkeypatch) -> None:
+    monkeypatch.delenv("NEO4J_DATABASE", raising=False)
+
+    assert neo4j_client._get_database_name() is None
+
+
+# Verifies explicit overrides because self-managed deployments may still target a named database.
+def test_get_database_name_returns_configured_value(monkeypatch) -> None:
+    monkeypatch.setenv("NEO4J_DATABASE", "analytics")
+
+    assert neo4j_client._get_database_name() == "analytics"
+
+
 # Verifies retry recovery because Aura cold starts should succeed when connectivity comes back within the retry window.
 def test_create_driver_with_retry_succeeds_on_third_attempt(monkeypatch) -> None:
     created_drivers = []
