@@ -1,0 +1,2 @@
+id,date,amount,method,invoice_id
+PAY-001,2025-11-22,980.00,BANK_TRANSFER,INV-001

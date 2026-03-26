@@ -1,0 +1,4 @@
+id,name,category,unit_price,order_id
+PROD-001,Industrial Pump,Equipment,540.00,ORD-001
+PROD-002,Valve Kit,Components,220.00,"ORD-001,ORD-003"
+PROD-003,Service Plan,Services,410.00,ORD-002

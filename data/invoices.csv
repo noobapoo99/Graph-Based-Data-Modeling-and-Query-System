@@ -1,0 +1,3 @@
+id,date,amount,status,delivery_id
+INV-001,2025-11-20,980.00,PAID,DEL-001
+INV-002,2025-11-22,620.00,OPEN,DEL-002
