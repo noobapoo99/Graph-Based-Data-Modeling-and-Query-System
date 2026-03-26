@@ -144,7 +144,7 @@ async def health_endpoint(request: Request) -> JSONResponse:
 
 
 # Returns a graph snapshot because the frontend and operators need a direct visualization payload without using the LLM.
-@router.get("/graph")
+@router.get("/graph", response_model=None)
 @limiter.limit("10/minute")
 async def graph_endpoint(request: Request) -> dict[str, list[dict]] | JSONResponse:
     request_id = generate_request_id()
@@ -168,7 +168,7 @@ async def graph_endpoint(request: Request) -> dict[str, list[dict]] | JSONRespon
 
 
 # Returns operationally interesting missing-link flows because incomplete order-to-cash chains are a core Stage 1 use case.
-@router.get("/broken-flows")
+@router.get("/broken-flows", response_model=None)
 @limiter.limit("10/minute")
 async def broken_flows_endpoint(request: Request) -> dict[str, object] | JSONResponse:
     request_id = generate_request_id()
