@@ -4,6 +4,26 @@ from unittest.mock import AsyncMock, Mock
 import main
 
 
+# Verifies production-friendly defaults because deployed frontends need to talk to the backend without manual CORS edits.
+def test_allowed_origins_returns_local_and_render_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("ALLOWED_ORIGINS", raising=False)
+
+    assert main._allowed_origins() == [
+        "http://localhost:5173",
+        "https://graph-query-frontend.onrender.com",
+    ]
+
+
+# Verifies environment overrides because operators may need to permit multiple explicit frontend origins.
+def test_allowed_origins_uses_configured_csv_list(monkeypatch) -> None:
+    monkeypatch.setenv("ALLOWED_ORIGINS", "https://example.com, https://admin.example.com ")
+
+    assert main._allowed_origins() == [
+        "https://example.com",
+        "https://admin.example.com",
+    ]
+
+
 # Verifies startup seeding is skipped when the graph already has data because normal restarts should stay fast and idempotent.
 def test_maybe_seed_database_skips_when_graph_is_not_empty(monkeypatch) -> None:
     load_all_mock = Mock()

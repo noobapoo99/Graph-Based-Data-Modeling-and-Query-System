@@ -24,11 +24,17 @@ load_dotenv()
 _startup_warmup_task: asyncio.Task[None] | None = None
 
 
+DEFAULT_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "https://graph-query-frontend.onrender.com",
+]
+
+
 # Splits configured frontend origins because local dev and Render need different CORS values without code edits.
 def _allowed_origins() -> list[str]:
-    configured = os.environ.get("ALLOWED_ORIGINS", "http://localhost:5173")
+    configured = os.environ.get("ALLOWED_ORIGINS", ",".join(DEFAULT_ALLOWED_ORIGINS))
     origins = [origin.strip() for origin in configured.split(",") if origin.strip()]
-    return origins or ["http://localhost:5173"]
+    return origins or DEFAULT_ALLOWED_ORIGINS
 
 app = FastAPI(
     title="Graph Query System",

@@ -25,7 +25,7 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: ALLOWED_ORIGINS
-        sync: false
+        value: https://graph-query-frontend.onrender.com
       - key: INGEST_TOKEN
         sync: false
 
